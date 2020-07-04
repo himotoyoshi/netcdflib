@@ -137,24 +137,20 @@ rb_nc_create (int argc, VALUE *argv, VALUE mod)
 {
   int status, nc_id;
 
-  if ( argc < 1 ) {
-    rb_raise(rb_eArgError, "invalid # of arguments");
-  }
-
-  CHECK_TYPE_STRING(argv[0]);
-
   if ( argc == 1 ) {
+    CHECK_TYPE_STRING(argv[0]);
     status = nc_create(StringValuePtr(argv[0]), NC_CLOBBER, &nc_id);
+    CHECK_STATUS(status);
   }
   else if ( argc == 2 ) {
+    CHECK_TYPE_STRING(argv[0]);
     CHECK_TYPE_INT(argv[1]);
     status = nc_create(StringValuePtr(argv[0]), NUM2INT(argv[1]), &nc_id);
+    CHECK_STATUS(status);
   }
   else {
-    rb_raise(rb_eArgError, "too many argument");
+    rb_raise(rb_eArgError, "invalid # of arguments");
   }
-
-  CHECK_STATUS(status);
 
   return LONG2NUM(nc_id);
 }
@@ -203,24 +199,20 @@ rb_nc_open (int argc, VALUE *argv, VALUE mod)
 {
   int status, nc_id;
 
-  if ( argc < 1 ) {
-    rb_raise(rb_eArgError, "invalid # of arguments");
-  }
-
-  CHECK_TYPE_STRING(argv[0]);
-
   if ( argc == 1 ) {
+    CHECK_TYPE_STRING(argv[0]);
     status = nc_open(StringValuePtr(argv[0]), NC_NOWRITE, &nc_id);
+    CHECK_STATUS(status);
   }
   else if ( argc == 2 ) {
+    CHECK_TYPE_STRING(argv[0]);
     CHECK_TYPE_INT(argv[1]);
     status = nc_open(StringValuePtr(argv[0]), NUM2INT(argv[1]), &nc_id);
+    CHECK_STATUS(status);
   }
   else {
-    rb_raise(rb_eArgError, "too many argument");
+    rb_raise(rb_eArgError, "invalid # of arguments");
   }
-
-  CHECK_STATUS(status);
 
   return LONG2NUM(nc_id);
 }
@@ -1804,20 +1796,20 @@ rb_nc_get_var (int argc, VALUE *argv, VALUE mod)
   if ( argc == 2 ) {
     volatile VALUE out;
     CArray *ca;
-    int8_t rank, data_type;
-    ca_size_t dim[CA_RANK_MAX];
+    int8_t ndim, data_type;
+    ca_size_t dim[CA_DIM_MAX];
     size_t len;
     int i;
 
     data_type = rb_nc_typemap (type);
-    rank = ndims;
-    for (i=0; i<rank; i++) {
+    ndim = ndims;
+    for (i=0; i<ndim; i++) {
       status = nc_inq_dimlen(NUM2INT(argv[0]), dimid[i], &len);
       CHECK_STATUS(status);
       dim[i] = len;
     }
 
-    out = rb_carray_new(data_type, rank, dim, 0, NULL);
+    out = rb_carray_new(data_type, ndim, dim, 0, NULL);
     Data_Get_Struct(out, CArray, ca);
 
     status = nc_get_var_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
@@ -1921,17 +1913,17 @@ rb_nc_get_vara (int argc, VALUE *argv, VALUE mod)
   if ( argc == 4 ) {
     volatile VALUE out;
     CArray *ca;
-    int8_t rank, data_type;
-    ca_size_t dim[CA_RANK_MAX];
+    int8_t ndim, data_type;
+    ca_size_t dim[CA_DIM_MAX];
     int i;
 
     data_type = rb_nc_typemap (type);
-    rank = ndims;
-    for (i=0; i<rank; i++) {
+    ndim = ndims;
+    for (i=0; i<ndim; i++) {
       dim[i] = count[i];
     }
 
-    out = rb_carray_new(data_type, rank, dim, 0, NULL);
+    out = rb_carray_new(data_type, ndim, dim, 0, NULL);
     Data_Get_Struct(out, CArray, ca);
 
     status = nc_get_vara_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
@@ -1950,11 +1942,11 @@ rb_nc_get_vara (int argc, VALUE *argv, VALUE mod)
     }
     Data_Get_Struct(data, CArray, ca);
 
-    if ( ca->rank != ndims ) {
-      rb_raise(rb_eRuntimeError, "rank mismatch");
+    if ( ca->ndim != ndims ) {
+      rb_raise(rb_eRuntimeError, "dimension mismatch");
     }
 
-    for (i=0; i<ca->rank; i++) {
+    for (i=0; i<ca->ndim; i++) {
       if ( ca->dim[i] != (ca_size_t) count[i] ) {
       	rb_raise(rb_eRuntimeError, "dim[%i] mismatch", i);
       }
@@ -2060,17 +2052,17 @@ rb_nc_get_vars (int argc, VALUE *argv, VALUE mod)
   if ( argc == 5 ) {
     volatile VALUE out;
     CArray *ca;
-    int8_t rank, data_type;
-    ca_size_t dim[CA_RANK_MAX];
+    int8_t ndim, data_type;
+    ca_size_t dim[CA_DIM_MAX];
     int i;
 
     data_type = rb_nc_typemap (type);
-    rank = ndims;
-    for (i=0; i<rank; i++) {
+    ndim = ndims;
+    for (i=0; i<ndim; i++) {
       dim[i] = count[i];
     }
 
-    out = rb_carray_new(data_type, rank, dim, 0, NULL);
+    out = rb_carray_new(data_type, ndim, dim, 0, NULL);
     Data_Get_Struct(out, CArray, ca);
 
     status = nc_get_vars_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
@@ -2090,11 +2082,11 @@ rb_nc_get_vars (int argc, VALUE *argv, VALUE mod)
 
     Data_Get_Struct(data, CArray, ca);
 
-    if ( ca->rank != ndims ) {
-      rb_raise(rb_eRuntimeError, "rank mismatch");
+    if ( ca->ndim != ndims ) {
+      rb_raise(rb_eRuntimeError, "dimension mismatch");
     }
 
-    for (i=0; i<ca->rank; i++) {
+    for (i=0; i<ca->ndim; i++) {
       if ( ca->dim[i] != (ca_size_t) count[i] ) {
       	rb_raise(rb_eRuntimeError, "dim[%i] mismatch", i);
       }
@@ -2205,17 +2197,17 @@ rb_nc_get_varm (int argc, VALUE *argv, VALUE mod)
   if ( argc == 6 ) {
     volatile VALUE out;
     CArray *ca;
-    int8_t rank, data_type;
-    ca_size_t dim[CA_RANK_MAX];
+    int8_t ndim, data_type;
+    ca_size_t dim[CA_DIM_MAX];
     int i;
 
     data_type = rb_nc_typemap (type);
-    rank = ndims;
-    for (i=0; i<rank; i++) {
+    ndim = ndims;
+    for (i=0; i<ndim; i++) {
       dim[i] = count[i];
     }
 
-    out = rb_carray_new(data_type, rank, dim, 0, NULL);
+    out = rb_carray_new(data_type, ndim, dim, 0, NULL);
     Data_Get_Struct(out, CArray, ca);
 
     status = nc_get_varm_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
@@ -2235,11 +2227,11 @@ rb_nc_get_varm (int argc, VALUE *argv, VALUE mod)
 
     Data_Get_Struct(data, CArray, ca);
 
-    if ( ca->rank != ndims ) {
-      rb_raise(rb_eRuntimeError, "rank mismatch");
+    if ( ca->ndim != ndims ) {
+      rb_raise(rb_eRuntimeError, "dimension mismatch");
     }
 
-    for (i=0; i<ca->rank; i++) {
+    for (i=0; i<ca->ndim; i++) {
       if ( ca->dim[i] != (ca_size_t) count[i] ) {
       	rb_raise(rb_eRuntimeError, "dim[%i] mismatch", i);
       }
@@ -2418,7 +2410,7 @@ rb_nc_copy_att (int argc, VALUE *argv, VALUE mod)
 }
 
 void
-Init_simple_netcdflib ()
+Init_netcdflib ()
 {
 
   mNetCDF = rb_define_module("NC");

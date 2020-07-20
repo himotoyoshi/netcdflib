@@ -43,6 +43,8 @@
       rb_raise(rb_eRuntimeError, "%s", nc_strerror(status))
 
 static VALUE mNetCDF;
+static VALUE NC_converter = Qnil;
+static ID    NC_converter_id;
 
 static int
 rb_nc_typemap (nc_type nc_type)
@@ -193,6 +195,34 @@ rb_nc_create_mem (int argc, VALUE *argv, VALUE mod)
   return LONG2NUM(nc_id);
 }
 */
+
+static VALUE
+rb_nc_set_converter (VALUE mod, VALUE rconv)
+{
+  if ( ! NIL_P(rconv) ) {
+    Check_Type(rconv, T_SYMBOL);    
+  }
+  NC_converter = rconv;
+  NC_converter_id = SYM2ID(NC_converter);
+  return NC_converter;
+}
+
+static VALUE
+rb_nc_get_converter (VALUE mod)
+{
+  return NC_converter;
+}
+
+static VALUE
+rb_nc_output (VALUE vout) 
+{
+  if ( NIL_P(NC_converter) ) {
+    return vout;
+  }
+  else {
+    return rb_funcall(vout, NC_converter_id, 0);
+  }
+}
 
 static VALUE
 rb_nc_open (int argc, VALUE *argv, VALUE mod)
@@ -1189,7 +1219,7 @@ rb_nc_get_att (int argc, VALUE *argv, VALUE mod)
 
       CHECK_STATUS(status);
 
-      return out;
+      return rb_nc_output(out);
     }
   } 
   else {
@@ -1204,12 +1234,10 @@ rb_nc_get_att (int argc, VALUE *argv, VALUE mod)
 			       StringValuePtr(text));
     }  
     else {
+      volatile VALUE data = rb_ca_wrap_writable(argv[3], Qnil);
       CArray *ca;
       nc_type xtype;
-      if ( ! rb_obj_is_kind_of(argv[3], rb_cCArray) ) {
-      	rb_raise(rb_eTypeError, "arg4 must be a CArray object");
-      }
-      Data_Get_Struct(argv[3], CArray, ca);
+      Data_Get_Struct(data, CArray, ca);
       xtype = rb_nc_rtypemap(ca->data_type);
       ca_attach(ca);
       status = nc_get_att_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
@@ -1250,12 +1278,10 @@ rb_nc_put_att (int argc, VALUE *argv, VALUE mod)
 				NC_DOUBLE, NC_DOUBLE, 1, &val);
   }
   else {
+    volatile VALUE data = rb_ca_wrap_readonly(argv[3], Qnil);
     CArray *ca;
     nc_type xtype;
-    if ( ! rb_obj_is_kind_of(argv[3], rb_cCArray) ) {
-      rb_raise(rb_eTypeError, "arg4 must be a CArray object");
-    }
-    Data_Get_Struct(argv[3], CArray, ca);
+    Data_Get_Struct(data, CArray, ca);
     xtype = rb_nc_rtypemap(ca->data_type);
     ca_attach(ca);
     status = nc_put_att_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
@@ -1701,12 +1727,8 @@ rb_nc_get_var1 (int argc, VALUE *argv, VALUE mod)
     }
   }
   else {
-    volatile VALUE data = argv[3];
+    volatile VALUE data = rb_ca_wrap_writable(argv[3], Qnil);
     CArray *ca;
-
-    if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-      rb_raise(rb_eTypeError, "arg4 must be a CArray object");
-    }
 
     Data_Get_Struct(data, CArray, ca);
 
@@ -1739,6 +1761,10 @@ rb_nc_put_var1 (int argc, VALUE *argv, VALUE mod)
 
   CHECK_ARGC(4);
 
+  status = nc_inq_vartype(NUM2INT(argv[0]), NUM2INT(argv[1]), &type);
+
+  CHECK_STATUS(status);
+
   status = nc_inq_varndims(NUM2INT(argv[0]), NUM2INT(argv[1]), &ndims);
 
   CHECK_STATUS(status);
@@ -1749,23 +1775,75 @@ rb_nc_put_var1 (int argc, VALUE *argv, VALUE mod)
     index[i] = NUM2ULONG(RARRAY_PTR(argv[2])[i]);
   }
 
-  data = argv[3];
-
-  if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-    rb_raise(rb_eTypeError, "arg4 must be a CArray object");
+  if ( rb_obj_is_kind_of(argv[3], rb_cNumeric) ) {
+    data = argv[3];
+    switch ( type ) {
+    case NC_BYTE: {
+      int8_t val = NUM2INT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_UBYTE: {
+      uint8_t val = NUM2UINT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_SHORT: {
+      int16_t val = NUM2INT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_USHORT: {
+      uint16_t val = NUM2UINT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_INT: {
+      int32_t val = NUM2INT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_UINT: {
+      uint32_t val = NUM2UINT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_INT64: {
+      int64_t val = NUM2INT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_UINT64: {
+      uint64_t val = NUM2UINT(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_FLOAT: {
+      float32_t val = NUM2DBL(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    case NC_DOUBLE: {
+      float64_t val = NUM2DBL(data);
+      status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+				   type, index, &val);
+    }
+    default: 
+      rb_raise(rb_eRuntimeError, "unknown nc_type");
+    }
+  }
+  else {
+    data = rb_ca_wrap_readonly(argv[3], Qnil);    
+    Data_Get_Struct(data, CArray, ca);
+    type = rb_nc_rtypemap(ca->data_type);
+    ca_attach(ca);
+    status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
+  			       type, index, ca->ptr);
+    ca_detach(ca);
   }
 
-  Data_Get_Struct(data, CArray, ca);
-
-  type = rb_nc_rtypemap(ca->data_type);
-
-  ca_attach(ca);
-  status = nc_put_var1_numeric(NUM2INT(argv[0]), NUM2INT(argv[1]), 
-			       type, index, ca->ptr);
-  ca_detach(ca);
-
   CHECK_STATUS(status);
-  
+
   return LONG2NUM(status);
 }
 
@@ -1817,15 +1895,11 @@ rb_nc_get_var (int argc, VALUE *argv, VALUE mod)
 
     CHECK_STATUS(status);
   
-    return out;
+    return rb_nc_output(out);
   }
   else {
-    volatile VALUE data = argv[2];
     CArray *ca;
-
-    if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-      rb_raise(rb_eTypeError, "arg3 must be a CArray object");
-    }
+    volatile VALUE data = rb_ca_wrap_writable(argv[2], Qnil);
 
     Data_Get_Struct(data, CArray, ca);
 
@@ -1857,11 +1931,7 @@ rb_nc_put_var (int argc, VALUE *argv, VALUE mod)
 
   CHECK_STATUS(status);
 
-  data = argv[2];
-
-  if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-    rb_raise(rb_eTypeError, "arg3 must be a CArray object");
-  }
+  data = rb_ca_wrap_readonly(argv[2], Qnil);
 
   Data_Get_Struct(data, CArray, ca);
 
@@ -1931,15 +2001,12 @@ rb_nc_get_vara (int argc, VALUE *argv, VALUE mod)
 
     CHECK_STATUS(status);
   
-    return out;
+    return rb_nc_output(out);
   }
   else {
-    volatile VALUE data = argv[4];
+    volatile VALUE data = rb_ca_wrap_writable(argv[4], Qnil);
     CArray *ca;
 
-    if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-      rb_raise(rb_eTypeError, "arg5 must be a CArray object");
-    }
     Data_Get_Struct(data, CArray, ca);
 
     if ( ca->ndim != ndims ) {
@@ -1991,11 +2058,7 @@ rb_nc_put_vara (int argc, VALUE *argv, VALUE mod)
     count[i] = NUM2ULONG(RARRAY_PTR(argv[3])[i]);
   }
 
-  data = argv[4];
-
-  if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-    rb_raise(rb_eTypeError, "arg5 must be a CArray object");
-  }
+  data = rb_ca_wrap_readonly(argv[4], Qnil);
 
   Data_Get_Struct(data, CArray, ca);
 
@@ -2070,15 +2133,11 @@ rb_nc_get_vars (int argc, VALUE *argv, VALUE mod)
 
     CHECK_STATUS(status);
   
-    return out;
+    return rb_nc_output(out);
   }
   else {
-    volatile VALUE data = argv[5];
+    volatile VALUE data = rb_ca_wrap_writable(argv[5], Qnil);
     int i;
-
-    if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-      rb_raise(rb_eTypeError, "arg6 must be a CArray object");
-    }
 
     Data_Get_Struct(data, CArray, ca);
 
@@ -2134,11 +2193,7 @@ rb_nc_put_vars (int argc, VALUE *argv, VALUE mod)
     stride[i] = NUM2ULONG(RARRAY_PTR(argv[4])[i]);
   }
 
-  data = argv[5];
-
-  if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-    rb_raise(rb_eTypeError, "arg6 must be a CArray object");
-  }
+  data = rb_ca_wrap_readonly(argv[5], Qnil);
 
   Data_Get_Struct(data, CArray, ca);
 
@@ -2215,15 +2270,11 @@ rb_nc_get_varm (int argc, VALUE *argv, VALUE mod)
 
     CHECK_STATUS(status);
   
-    return out;
+    return rb_nc_output(out);
   }
   else {
-    volatile VALUE data = argv[6];
+    volatile VALUE data = rb_ca_wrap_writable(argv[6], Qnil);
     int i;
-
-    if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-      rb_raise(rb_eTypeError, "arg6 must be a CArray object");
-    }
 
     Data_Get_Struct(data, CArray, ca);
 
@@ -2281,11 +2332,7 @@ rb_nc_put_varm (int argc, VALUE *argv, VALUE mod)
     imap[i]   = NUM2ULONG(RARRAY_PTR(argv[5])[i]);
   }
 
-  data = argv[6];
-
-  if ( ! rb_obj_is_kind_of(data, rb_cCArray) ) {
-    rb_raise(rb_eTypeError, "arg7 must be a CArray object");
-  }
+  data = rb_ca_wrap_readonly(argv[6], Qnil);
 
   Data_Get_Struct(data, CArray, ca);
 
@@ -2417,6 +2464,9 @@ Init_netcdflib ()
 
   rb_define_singleton_method(mNetCDF, "ca_type",  rb_nc_ca_type, -1);
   rb_define_singleton_method(mNetCDF, "nc_type",  rb_nc_nc_type, -1);
+
+  rb_define_singleton_method(mNetCDF, "converter",  rb_nc_get_converter, 0);
+  rb_define_singleton_method(mNetCDF, "converter=",  rb_nc_set_converter, 1);
 
   rb_define_module_function(mNetCDF, "nc_create", rb_nc_create, -1);
   rb_define_singleton_method(mNetCDF,   "create", rb_nc_create, -1);

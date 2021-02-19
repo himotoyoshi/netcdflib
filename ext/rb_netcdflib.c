@@ -40,7 +40,7 @@
 
 #define CHECK_STATUS(status) \
     if ( (status) != NC_NOERR )	\
-      rb_raise(rb_eRuntimeError, "%s", nc_strerror(status))
+      rb_raise(rb_eRuntimeError, "%s (STATUS=%i)", nc_strerror(status), status)
 
 static VALUE mNetCDF;
 static VALUE NC_converter = Qnil;
@@ -980,7 +980,7 @@ rb_nc_def_var_deflate (int argc, VALUE *argv, VALUE mod)
   CHECK_TYPE_INT(argv[2]);
   CHECK_TYPE_INT(argv[3]);
   CHECK_TYPE_INT(argv[4]);
-  
+
   status = nc_def_var_deflate(NUM2INT(argv[0]), NUM2INT(argv[1]),
                               NUM2INT(argv[2]), NUM2INT(argv[3]), NUM2INT(argv[4]));
 
